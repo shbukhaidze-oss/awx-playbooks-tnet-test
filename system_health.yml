@@ -1,0 +1,17 @@
+---
+- name: Enterprise System Health Check
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Display the Operating System version
+      ansible.builtin.debug:
+        msg: "Server {{ ansible_hostname }} is running {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: Run a command to check root disk space
+      ansible.builtin.command: df -h /
+      register: disk_output
+
+    - name: Print the disk space to the AWX console
+      ansible.builtin.debug:
+        var: disk_output.stdout_lines
