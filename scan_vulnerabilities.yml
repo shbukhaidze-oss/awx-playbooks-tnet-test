@@ -1,14 +1,15 @@
 ---
 - name: Enterprise Linux Compliance & Vulnerability Scanner
   hosts: all
-  become: yes
-  become_method: sudo
   gather_facts: yes
 
   tasks:
-    - name: 0. Check effective user (Who am I?)
+    - name: 0. Check effective user
       ansible.builtin.command: whoami
       register: whoami_result
+      become: yes
+      become_user: root
+      become_method: sudo
 
     - name: 0b. Print effective user
       ansible.builtin.debug:
@@ -18,6 +19,9 @@
       ansible.builtin.apt:
         update_cache: yes
         cache_valid_time: 3600
+      become: yes
+      become_user: root
+      become_method: sudo
 
     - name: 2. Check for reboot requirement
       ansible.builtin.stat:
