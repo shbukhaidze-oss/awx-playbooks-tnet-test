@@ -6,6 +6,14 @@
   gather_facts: yes
 
   tasks:
+    - name: 0. Check effective user (Who am I?)
+      ansible.builtin.command: whoami
+      register: whoami_result
+
+    - name: 0b. Print effective user
+      ansible.builtin.debug:
+        msg: "Currently running as user: {{ whoami_result.stdout }}"
+
     - name: 1. Refresh APT package index
       ansible.builtin.apt:
         update_cache: yes
