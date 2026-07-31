@@ -1,0 +1,37 @@
+---
+- name: Enterprise Package Hold (Decline) & Unhold Management
+  hosts: all
+  become: yes
+  become_method: sudo
+  gather_facts: no
+
+  vars:
+    # Passed dynamically via AWX extra_vars from Python API / Frontend UI
+    target_packages: []
+    action: "hold" # Options: "hold" or "unhold"
+
+  tasks:
+    - name: 1. Apply APT Package Hold
+      ansible.builtin.command: "apt-mark hold {{ item }}"
+      loop: "{{ target_packages }}"
+      when: action == "hold" and target_packages | length > 0
+      changed_when: true
+
+    - name: 2. Remove APT Package Hold (Unhold)
+      ansible.builtin.command: "apt-mark unhold {{ item }}"
+      loop: "{{ target_packages }}"
+      when: action == "unhold" and target_packages | length > 0
+      changed_when: true
+
+    - name: 3. Verify currently held packages on system
+      ansible.builtin.command: apt-mark showhold
+      register: current_holds
+      changed_when: false
+
+    - name: 4. Output hold state to AWX Console
+      ansible.builtin.debug:
+        msg:
+          hostname: "{{ inventory_hostname }}"
+          action_taken: "{{ action }}"
+          processed_packages: "{{ target_packages }}"
+          currently_held_packages: "{{ current_holds.stdout_lines }}"
