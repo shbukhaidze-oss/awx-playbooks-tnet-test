@@ -11,10 +11,6 @@
       become_user: root
       become_method: sudo
 
-    - name: 0b. Print effective user
-      ansible.builtin.debug:
-        msg: "Currently running as user: {{ whoami_result.stdout }}"
-
     - name: 1. Refresh APT package index
       ansible.builtin.apt:
         update_cache: yes
@@ -28,28 +24,45 @@
         path: /var/run/reboot-required
       register: reboot_check
 
-    - name: 3. Retrieve list of upgradable packages
-      ansible.builtin.command: apt list -u --upgradable
-      register: apt_upgradable_raw
-      changed_when: false
-
-    - name: 4. Retrieve security updates list
+    - name: 3. Parse detailed package update list
       ansible.builtin.shell: |
-        apt-get -s dist-upgrade | grep "^Inst" | grep -i security || true
-      register: security_updates_raw
+        python3 -c '
+        import subprocess, json
+        raw = subprocess.check_output(["apt-get", "-s", "dist-upgrade"]).decode("utf-8")
+        pkgs = []
+        for line in raw.splitlines():
+            if line.startswith("Inst "):
+                parts = line.split()
+                name = parts[1]
+                current_v = parts[2].replace("[", "").replace("]", "") if len(parts) > 2 else "unknown"
+                new_v = parts[3].replace("(", "").replace(")", "") if len(parts) > 3 else "unknown"
+                is_sec = "security" in line.lower()
+                pkgs.append({
+                    "package": name,
+                    "current_version": current_v,
+                    "new_version": new_v,
+                    "is_security": is_sec
+                })
+        print(json.dumps(pkgs))
+        '
+      register: detailed_packages_raw
       changed_when: false
+      become: yes
+      become_user: root
+      become_method: sudo
 
-    - name: 5. Parse metrics into structured JSON
+    - name: 4. Parse metrics & build structured JSON
       ansible.builtin.set_fact:
         scan_results:
           hostname: "{{ ansible_hostname }}"
           ip_address: "{{ ansible_default_ipv4.address }}"
           os_version: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
           reboot_required: "{{ reboot_check.stat.exists }}"
-          total_pending_packages: "{{ apt_upgradable_raw.stdout_lines | length - 1 }}"
-          security_packages_count: "{{ security_updates_raw.stdout_lines | length }}"
+          total_pending_packages: "{{ (detailed_packages_raw.stdout | from_json) | length }}"
+          security_packages_count: "{{ (detailed_packages_raw.stdout | from_json) | selectattr('is_security', 'equalto', true) | list | length }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"
+          packages: "{{ detailed_packages_raw.stdout | from_json }}"
 
-    - name: 6. Output Scan Summary to AWX Console
+    - name: 5. Output Scan Summary & Package Inventory to AWX Console
       ansible.builtin.debug:
         var: scan_results
