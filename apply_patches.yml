@@ -1,0 +1,44 @@
+---
+- name: Enterprise Automated Linux Patching Engine
+  hosts: all
+  become: yes
+  become_method: sudo
+  gather_facts: yes
+
+  vars:
+    # Passed dynamically via AWX extra_vars from Python API / Frontend UI
+    patch_type: "security_only" # Options: "security_only" or "full_upgrade"
+    allow_reboot: false
+
+  tasks:
+    - name: 1. Refresh APT package index
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: 2. Execute Security-Only Patches
+      ansible.builtin.shell: |
+        apt-get -s dist-upgrade | grep "^Inst" | grep -i security | awk '{print $2}' | xargs -r apt-get install -y --only-upgrade
+      when: patch_type == "security_only"
+
+    - name: 3. Execute Full Upgrade (All Pending Packages)
+      ansible.builtin.apt:
+        upgrade: dist
+      when: patch_type == "full_upgrade"
+
+    - name: 4. Check if host requires reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_check
+
+    - name: 5. Perform controlled system reboot (If required and allowed)
+      ansible.builtin.reboot:
+        msg: "Automated patch management system reboot triggered by AWX"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+      when:
+        - reboot_check.stat.exists
+        - allow_reboot | bool
