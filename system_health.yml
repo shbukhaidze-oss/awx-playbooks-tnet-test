@@ -1,7 +1,8 @@
 ---
-- name: Enterprise System Health Check
-  hosts: all
-  become: yes
+- name: Enterprise Linux Compliance & Vulnerability Scanner
+  hosts: all  # <-- Make sure this says 'all', NOT an IP address!
+  gather_facts: true
+  become: true
 
   tasks:
     - name: Display the Operating System version
